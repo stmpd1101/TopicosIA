@@ -30,7 +30,7 @@ def es_valido(tablero, posicion):
     return (0 <= x < m) and (0 <= y < n) and (tablero[x][y] != "X")
 
 def bfs(tablero, inicio, meta):
-    # Orden de movimientos (puedes cambiarlo si tu profe quiere otro)
+    # Orden de movimientos 
     acciones = [
         ("arriba",    (-1, 0)),
         ("abajo",     ( 1, 0)),
