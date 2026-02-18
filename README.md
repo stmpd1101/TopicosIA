@@ -10,3 +10,6 @@
 1. **Laberinto**
    - [Notebook](./laberinto.ipynb)
    - [Script Python](./laberinto.py)
+2. **Laberinto BFS (búsqueda en anchura)**
+   - [Notebook](./laberinto(bfs).ipynb)
+   - [Script Python](./laberinto(bfs).py)
