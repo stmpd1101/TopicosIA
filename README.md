@@ -4,10 +4,10 @@
 **Alumno:** Flores Soto Gael Eduardo  
 **Numero de Control:** 20170661
 
-**Alumno:** Uriarte Lopez Brandon Gael
+**Alumno:** Uriarte Lopez Brandon Gael  
 **Numero de Control:** C21171176
----
 
+---
 ## Índice
 
 1. **Laberinto**
