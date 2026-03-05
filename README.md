@@ -7,6 +7,9 @@
 **Alumno:** Uriarte Lopez Brandon Gael  
 **Numero de Control:** C21171176
 
+**Alumno:** Gomez López Rodolfo
+**Numero de Control:** 21170345
+
 ---
 ## Índice
 
