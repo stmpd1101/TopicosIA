@@ -3,13 +3,10 @@
 
 **Alumno:** Flores Soto Gael Eduardo  
 **Numero de Control:** 20170661
-
 **Alumno:** Uriarte Lopez Brandon Gael  
 **Numero de Control:** C21171176
-
 **Alumno:** Gomez López Rodolfo
 **Numero de Control:** 21170345
-
 ---
 ## Índice
 
