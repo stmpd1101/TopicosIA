@@ -32,7 +32,12 @@ def generar_obstaculos(tablero, porcentaje, inicio, meta):
     filas = len(tablero)
     columnas = len(tablero[0])
     total_celdas = filas * columnas
+
     cantidad_obstaculos = int(total_celdas * porcentaje / 100)
+    max_obstaculos = total_celdas - 2
+
+    if cantidad_obstaculos > max_obstaculos:
+        cantidad_obstaculos = max_obstaculos
 
     generados = 0
     while generados < cantidad_obstaculos:
@@ -75,18 +80,20 @@ def heuristica_manhattan(a, b):
 
 
 def reconstruir_camino(padres, inicio, meta):
+    if meta not in padres:
+        return None, None
+
     camino = []
     movimientos = []
     actual = meta
 
-    if meta not in padres:
-        return None, None
-
     while actual is not None:
         camino.append(actual)
         padre, accion = padres[actual]
+
         if accion is not None:
             movimientos.append(accion)
+
         actual = padre
 
     camino.reverse()
@@ -94,7 +101,7 @@ def reconstruir_camino(padres, inicio, meta):
     return camino, movimientos
 
 
-def marcar_camino(tablero, camino, inicio, meta):
+def marcar_ruta(tablero, camino, inicio, meta):
     copia = [fila[:] for fila in tablero]
 
     for x, y in camino:
@@ -106,12 +113,23 @@ def marcar_camino(tablero, camino, inicio, meta):
     return copia
 
 
-def mostrar_paso(numero_paso, actual, estructura, visitados):
-    print(f"Paso {numero_paso}")
-    print(f"Actual: {actual}")
-    print(f"Estructura: {estructura}")
-    print(f"Visitados: {visitados}")
-    print("-" * 50)
+def mostrar_resumen_paso(numero_paso, actual):
+    print(f"Paso {numero_paso}: actual = {actual}")
+
+
+def imprimir_resultado(nombre_algoritmo, tablero_original, inicio, meta, camino, movimientos):
+    if camino is None:
+        print(f"\n{nombre_algoritmo}: no encontró un camino.")
+        return
+
+    print(f"\nCamino encontrado por {nombre_algoritmo} con {len(camino) - 1} pasos.")
+    print("Movimientos:", ", ".join(movimientos))
+
+    tablero_final = [fila[:] for fila in tablero_original]
+    tablero_final = marcar_ruta(tablero_final, camino, inicio, meta)
+
+    print("\nTablero con ruta (*):")
+    imprimir_tablero(tablero_final)
 
 
 # =========================================================
@@ -129,7 +147,7 @@ def bfs(tablero, inicio, meta, mostrar=False):
         paso += 1
 
         if mostrar:
-            mostrar_paso(paso, actual, list(frontera), list(visitados))
+            mostrar_resumen_paso(paso, actual)
 
         if actual == meta:
             return reconstruir_camino(padres, inicio, meta)
@@ -163,7 +181,7 @@ def dfs(tablero, inicio, meta, mostrar=False):
         visitados.add(actual)
 
         if mostrar:
-            mostrar_paso(paso, actual, frontera[:], list(visitados))
+            mostrar_resumen_paso(paso, actual)
 
         if actual == meta:
             return reconstruir_camino(padres, inicio, meta)
@@ -199,7 +217,7 @@ def ldfs(tablero, inicio, meta, limite, mostrar=False):
         visitados.add(actual)
 
         if mostrar:
-            mostrar_paso(paso, (actual, profundidad), frontera[:], list(visitados))
+            print(f"Paso {paso}: actual = {actual}, profundidad = {profundidad}")
 
         if actual == meta:
             return reconstruir_camino(padres, inicio, meta)
@@ -226,7 +244,7 @@ def ildfs(tablero, inicio, meta, mostrar=False):
 
     for limite in range(max_limite + 1):
         if mostrar:
-            print(f"\nIntentando con límite = {limite}\n")
+            print(f"\nIntentando con límite = {limite}")
         camino, movimientos = ldfs(tablero, inicio, meta, limite, mostrar)
         if camino is not None:
             return camino, movimientos
@@ -241,6 +259,7 @@ def ildfs(tablero, inicio, meta, mostrar=False):
 def voraz(tablero, inicio, meta, mostrar=False):
     heap = []
     heapq.heappush(heap, (heuristica_manhattan(inicio, meta), inicio))
+
     visitados = set()
     padres = {inicio: (None, None)}
     paso = 0
@@ -255,7 +274,7 @@ def voraz(tablero, inicio, meta, mostrar=False):
         visitados.add(actual)
 
         if mostrar:
-            mostrar_paso(paso, actual, [elem[1] for elem in heap], list(visitados))
+            mostrar_resumen_paso(paso, actual)
 
         if actual == meta:
             return reconstruir_camino(padres, inicio, meta)
@@ -294,7 +313,7 @@ def a_estrella(tablero, inicio, meta, mostrar=False):
         visitados.add(actual)
 
         if mostrar:
-            mostrar_paso(paso, actual, [elem[2] for elem in heap], list(visitados))
+            mostrar_resumen_paso(paso, actual)
 
         if actual == meta:
             return reconstruir_camino(padres, inicio, meta)
@@ -316,7 +335,7 @@ def a_estrella(tablero, inicio, meta, mostrar=False):
 # BÚSQUEDA TABÚ
 # =========================================================
 
-def busqueda_tabu(tablero, inicio, meta, iteraciones_max=100, tamano_tabu=10, mostrar=False):
+def busqueda_tabu(tablero, inicio, meta, iteraciones_max=200, tamano_tabu=10, mostrar=False):
     actual = inicio
     mejor = inicio
     padres = {inicio: (None, None)}
@@ -324,6 +343,9 @@ def busqueda_tabu(tablero, inicio, meta, iteraciones_max=100, tamano_tabu=10, mo
     lista_tabu.append(actual)
 
     for paso in range(1, iteraciones_max + 1):
+        if mostrar:
+            mostrar_resumen_paso(paso, actual)
+
         if actual == meta:
             return reconstruir_camino(padres, inicio, meta)
 
@@ -359,12 +381,6 @@ def busqueda_tabu(tablero, inicio, meta, iteraciones_max=100, tamano_tabu=10, mo
         if heuristica_manhattan(actual, meta) < heuristica_manhattan(mejor, meta):
             mejor = actual
 
-        if mostrar:
-            mostrar_paso(paso, actual, list(lista_tabu), [])
-
-    if actual == meta:
-        return reconstruir_camino(padres, inicio, meta)
-
     return None, None
 
 
@@ -372,13 +388,16 @@ def busqueda_tabu(tablero, inicio, meta, iteraciones_max=100, tamano_tabu=10, mo
 # RECOCIDO SIMULADO
 # =========================================================
 
-def recocido_simulado(tablero, inicio, meta, temp_inicial=50, enfriamiento=0.95, iteraciones=200, mostrar=False):
+def recocido_simulado(tablero, inicio, meta, temp_inicial=50, enfriamiento=0.95, iteraciones=300, mostrar=False):
     actual = inicio
     mejor = inicio
     padres = {inicio: (None, None)}
     temperatura = temp_inicial
 
     for paso in range(1, iteraciones + 1):
+        if mostrar:
+            print(f"Paso {paso}: actual = {actual}, temperatura = {temperatura:.4f}")
+
         if actual == meta:
             return reconstruir_camino(padres, inicio, meta)
 
@@ -408,9 +427,6 @@ def recocido_simulado(tablero, inicio, meta, temp_inicial=50, enfriamiento=0.95,
 
         if heuristica_manhattan(actual, meta) < heuristica_manhattan(mejor, meta):
             mejor = actual
-
-        if mostrar:
-            print(f"Paso {paso} | Actual: {actual} | Mejor: {mejor} | Temperatura: {temperatura:.4f}")
 
         temperatura *= enfriamiento
 
@@ -443,38 +459,39 @@ def mostrar_menu():
 def ejecutar_algoritmo(opcion, tablero, inicio, meta, mostrar_pasos):
     if opcion == 1:
         return bfs(tablero, inicio, meta, mostrar_pasos), "BFS"
-
     elif opcion == 2:
         return dfs(tablero, inicio, meta, mostrar_pasos), "DFS"
-
     elif opcion == 3:
         limite = int(input("Ingrese el límite de profundidad para LDFS: "))
         return ldfs(tablero, inicio, meta, limite, mostrar_pasos), "LDFS"
-
     elif opcion == 4:
         return ildfs(tablero, inicio, meta, mostrar_pasos), "ILDFS"
-
     elif opcion == 5:
         return voraz(tablero, inicio, meta, mostrar_pasos), "Voraz"
-
     elif opcion == 6:
         return a_estrella(tablero, inicio, meta, mostrar_pasos), "A*"
-
     elif opcion == 7:
         return busqueda_tabu(tablero, inicio, meta, mostrar=mostrar_pasos), "Búsqueda Tabú"
-
     elif opcion == 8:
         return recocido_simulado(tablero, inicio, meta, mostrar=mostrar_pasos), "Recocido Simulado"
-
     else:
         return (None, None), "Opción inválida"
 
 
 def menu_principal():
     print("=== CONFIGURACIÓN DEL LABERINTO ===")
+
     filas = int(input("Ingrese el número de filas: "))
     columnas = int(input("Ingrese el número de columnas: "))
     porcentaje = float(input("Ingrese el porcentaje de obstáculos: "))
+
+    if filas <= 0 or columnas <= 0:
+        print("Las filas y columnas deben ser mayores que 0.")
+        return
+
+    if porcentaje < 0 or porcentaje > 100:
+        print("El porcentaje debe estar entre 0 y 100.")
+        return
 
     tablero = crear_tablero(filas, columnas)
     inicio, meta = colocar_inicio_meta_aleatorio(filas, columnas)
@@ -493,30 +510,17 @@ def menu_principal():
         print("Programa finalizado.")
         return
 
-    mostrar_pasos = input("¿Desea mostrar el proceso paso a paso? (s/n): ").strip().lower() == "s"
+    mostrar_pasos = input("¿Desea mostrar pasos resumidos? (s/n): ").strip().lower() == "s"
 
-    # Copia del tablero sin alterar la versión original al resolver
     tablero_busqueda = [fila[:] for fila in tablero]
-
-    # Para lógica interna, dejamos I y M transitables
     tablero_busqueda[inicio[0]][inicio[1]] = "."
     tablero_busqueda[meta[0]][meta[1]] = "."
 
-    (camino, movimientos), nombre = ejecutar_algoritmo(opcion, tablero_busqueda, inicio, meta, mostrar_pasos)
+    (camino, movimientos), nombre = ejecutar_algoritmo(
+        opcion, tablero_busqueda, inicio, meta, mostrar_pasos
+    )
 
-    if camino is None:
-        print(f"\n{name}: no encontró un camino.")
-    else:
-        print(f"\n{name}: sí encontró un camino.")
-        print("Movimientos:")
-        print(movimientos)
-        print("\nCamino:")
-        print(camino)
-
-        tablero_final = marcar_camino(tablero_busqueda, camino, inicio, meta)
-
-        print("\nTablero con camino encontrado:")
-        imprimir_tablero(tablero_final)
+    imprimir_resultado(nombre, tablero, inicio, meta, camino, movimientos)
 
 
 if __name__ == "__main__":
