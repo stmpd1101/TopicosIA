@@ -11,6 +11,6 @@
 
 ## Índice
 
-1. [Problema del laberinto](./problemalaberinto.py)
-2. [Problema de las reinas](./Reinas_DFS.py)
+Tarea 1. [Problema del laberinto](./problemalaberinto.py)
+Tarea 2. [Problema de las reinas](./Reinas_DFS.py)
 
