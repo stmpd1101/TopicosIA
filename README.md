@@ -1,12 +1,16 @@
-# TopicosIA
 # Tareas de Tópicos de Inteligencia Artificial (19:00 - 20:00)
 
 **Alumno:** Flores Soto Gael Eduardo  
-**Numero de Control:** 20170661  
+**Número de Control:** 20170661  
 
 **Alumno:** Uriarte Lopez Brandon Gael  
-**Numero de Control:** 21171176  
+**Número de Control:** 21171176  
 
 **Alumno:** Gomez López Rodolfo  
-**Numero de Control:** 21170345  
+**Número de Control:** 21170345  
+
+## Índice
+
+1. [Problema del laberinto](./problemalaberinto.py)
+2. [Problema de las reinas](./Reinas_DFS.py)
 
