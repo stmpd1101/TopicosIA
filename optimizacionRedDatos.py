@@ -1,7 +1,6 @@
 # ============================================================
 # OPTIMIZACIÓN DE RED DE DATOS CON ALGORITMOS BIOINSPIRADOS
 # ------------------------------------------------------------
-# Algoritmos incluidos:
 #   1) Algoritmo Genético (GA)
 #   2) PSO discreto
 #   3) GWO discreto
@@ -15,15 +14,6 @@
 #       * desbalance de carga
 #       * exceso de capacidad
 #       * congestión respecto al umbral
-#
-# Representación:
-#   - Fenotipo: rutas reales usadas por las demandas en la red
-#   - Genotipo: vector discreto, donde cada gen indica cuál
-#               ruta candidata usa cada demanda
-#
-# Requisitos:
-#   - Python 3.x
-#   - No usa librerías externas
 # ============================================================
 
 import random
@@ -58,7 +48,6 @@ ITERACIONES = 80
 # Formato:
 #   ("N1", "N2"): {"capacidad": 100, "latencia": 10, "umbral": 0.75}
 #
-# Puedes cambiar estos datos por los de tu tarea.
 # ============================================================
 
 ENLACES = {
