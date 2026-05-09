@@ -1,6 +1,7 @@
 # ============================================================
 # OPTIMIZACIÓN DE RED DE DATOS CON ALGORITMOS BIOINSPIRADOS
 # ------------------------------------------------------------
+# Algoritmos incluidos:
 #   1) Algoritmo Genético (GA)
 #   2) PSO discreto
 #   3) GWO discreto
@@ -14,10 +15,18 @@
 #       * desbalance de carga
 #       * exceso de capacidad
 #       * congestión respecto al umbral
+#
+# Representación:
+#   - Fenotipo: rutas reales usadas por las demandas en la red
+#   - Genotipo: vector discreto, donde cada gen indica cuál
+#               ruta candidata usa cada demanda
+#
+# Requisitos:
+#   - Python 3.x
+#   - No usa librerías externas
 # ============================================================
 
 import random
-import math
 import copy
 from collections import defaultdict
 
@@ -29,25 +38,33 @@ SEED = 42
 random.seed(SEED)
 
 # Pesos de la función objetivo
-ALPHA = 1.0     # peso latencia total
-BETA = 50.0     # peso desbalance
-GAMMA = 1000.0  # peso exceso de capacidad
-DELTA = 800.0   # peso congestión por umbral
+ALPHA = 1.0      # Peso de la latencia total
+BETA = 50.0      # Peso del desbalance de carga
+GAMMA = 1000.0   # Peso de la penalización por exceder capacidad
+DELTA = 800.0    # Peso de la penalización por superar umbral de congestión
 
 # Número máximo de rutas candidatas por demanda
-K_RUTAS = 5
+K_RUTAS = 10
 
-# Parámetros generales de algoritmos
-POBLACION = 30
-ITERACIONES = 80
+# Parámetros generales de los algoritmos
+POBLACION = 15
+ITERACIONES = 30
+
+# Tolerancia para comparar costos con decimales
+TOLERANCIA = 1e-6
 
 # ============================================================
 # DATOS DEL PROBLEMA
 # ============================================================
 # Red no dirigida.
+#
 # Formato:
 #   ("N1", "N2"): {"capacidad": 100, "latencia": 10, "umbral": 0.75}
 #
+# Cada enlace tiene:
+#   - capacidad: tráfico máximo que soporta el enlace
+#   - latencia: costo de tiempo asociado al enlace
+#   - umbral: porcentaje máximo recomendado de uso antes de considerarlo congestionado
 # ============================================================
 
 ENLACES = {
@@ -62,7 +79,13 @@ ENLACES = {
     ("N5", "N6"): {"capacidad": 100, "latencia": 2, "umbral": 0.80},
 }
 
-# Demandas: (origen, destino, trafico)
+# Demandas de tráfico.
+#
+# Formato:
+#   (origen, destino, tráfico)
+#
+# Cada demanda representa una cantidad de tráfico que debe enviarse
+# desde un nodo origen hasta un nodo destino.
 DEMANDAS = [
     ("N1", "N6", 30),
     ("N1", "N5", 25),
@@ -76,37 +99,77 @@ DEMANDAS = [
 # ============================================================
 
 def normalizar_arista(a, b):
-    """Convierte una arista a una representación ordenada."""
+    """
+    Convierte una arista a una representación ordenada.
+
+    Como la red es no dirigida, el enlace N1-N2 es equivalente
+    al enlace N2-N1. Para evitar duplicados, siempre se ordenan
+    los nodos de la arista.
+    """
     return tuple(sorted((a, b)))
 
+
 def construir_grafo(enlaces):
-    """Construye lista de adyacencia."""
+    """
+    Construye una lista de adyacencia a partir del diccionario de enlaces.
+
+    La lista de adyacencia permite conocer los vecinos de cada nodo.
+    """
     grafo = defaultdict(list)
+
     for (u, v), datos in enlaces.items():
         grafo[u].append(v)
         grafo[v].append(u)
+
     return grafo
+
 
 GRAFO = construir_grafo(ENLACES)
 
+
 def obtener_datos_arista(u, v):
-    """Devuelve el diccionario de datos de una arista."""
+    """
+    Devuelve los datos de capacidad, latencia y umbral de una arista.
+    """
     arista = normalizar_arista(u, v)
     return ENLACES[arista]
 
+
 def costo_latencia_ruta(ruta):
-    """Suma la latencia total de una ruta."""
+    """
+    Calcula la latencia total de una ruta.
+
+    Ejemplo:
+        Ruta: N1 -> N3 -> N5
+        Latencia total = latencia(N1,N3) + latencia(N3,N5)
+    """
     total = 0
+
     for i in range(len(ruta) - 1):
-        u, v = ruta[i], ruta[i + 1]
+        u = ruta[i]
+        v = ruta[i + 1]
         total += obtener_datos_arista(u, v)["latencia"]
+
     return total
 
+
 def ruta_a_aristas(ruta):
-    """Convierte una ruta [N1, N2, N4] a [(N1,N2),(N2,N4)]."""
+    """
+    Convierte una ruta de nodos en una lista de aristas.
+
+    Ejemplo:
+        ["N1", "N3", "N5"]
+
+    Se convierte en:
+        [("N1", "N3"), ("N3", "N5")]
+    """
     aristas = []
+
     for i in range(len(ruta) - 1):
-        aristas.append(normalizar_arista(ruta[i], ruta[i + 1]))
+        u = ruta[i]
+        v = ruta[i + 1]
+        aristas.append(normalizar_arista(u, v))
+
     return aristas
 
 # ============================================================
@@ -115,47 +178,63 @@ def ruta_a_aristas(ruta):
 
 def enumerar_rutas_simples(grafo, origen, destino, max_profundidad=8):
     """
-    Genera rutas simples entre origen y destino por DFS.
-    Para redes pequeñas/medianas de tarea funciona bien.
+    Genera rutas simples entre un nodo origen y un nodo destino.
+
+    Una ruta simple es una ruta que no repite nodos. Esto evita ciclos
+    innecesarios dentro del camino.
     """
     rutas = []
 
     def dfs(actual, meta, visitados, camino):
         if len(camino) > max_profundidad:
             return
+
         if actual == meta:
             rutas.append(camino[:])
             return
+
         for vecino in grafo[actual]:
             if vecino not in visitados:
                 visitados.add(vecino)
                 camino.append(vecino)
+
                 dfs(vecino, meta, visitados, camino)
+
                 camino.pop()
                 visitados.remove(vecino)
 
     dfs(origen, destino, {origen}, [origen])
+
     return rutas
+
 
 def k_mejores_rutas(origen, destino, k=K_RUTAS):
     """
-    Obtiene hasta k rutas candidatas ordenadas por latencia.
+    Obtiene hasta k rutas candidatas entre origen y destino,
+    ordenadas por menor latencia.
     """
     rutas = enumerar_rutas_simples(GRAFO, origen, destino, max_profundidad=8)
     rutas_ordenadas = sorted(rutas, key=costo_latencia_ruta)
+
     return rutas_ordenadas[:k]
+
 
 def generar_rutas_candidatas(demandas):
     """
-    Para cada demanda, genera sus rutas candidatas.
+    Genera rutas candidatas para cada demanda.
     """
     candidatas = []
-    for (origen, destino, trafico) in demandas:
+
+    for origen, destino, trafico in demandas:
         rutas = k_mejores_rutas(origen, destino, K_RUTAS)
+
         if not rutas:
             raise ValueError(f"No hay ruta entre {origen} y {destino}")
+
         candidatas.append(rutas)
+
     return candidatas
+
 
 RUTAS_CANDIDATAS = generar_rutas_candidatas(DEMANDAS)
 
@@ -166,21 +245,35 @@ RUTAS_CANDIDATAS = generar_rutas_candidatas(DEMANDAS)
 def crear_solucion_aleatoria():
     """
     Crea un genotipo aleatorio.
-    Cada gen = índice de ruta candidata seleccionada para una demanda.
+
+    Cada posición del vector representa una demanda.
+    Cada valor representa el índice de la ruta candidata elegida
+    para esa demanda.
     """
     solucion = []
+
     for rutas in RUTAS_CANDIDATAS:
         solucion.append(random.randint(0, len(rutas) - 1))
+
     return solucion
+
 
 def decodificar_solucion(solucion):
     """
-    Convierte el genotipo en rutas reales (fenotipo).
+    Convierte el genotipo en fenotipo.
+
+    Genotipo:
+        Vector de índices de rutas.
+
+    Fenotipo:
+        Rutas reales elegidas para cada demanda.
     """
     rutas_elegidas = []
+
     for i, idx_ruta in enumerate(solucion):
         ruta = RUTAS_CANDIDATAS[i][idx_ruta]
         rutas_elegidas.append(ruta)
+
     return rutas_elegidas
 
 # ============================================================
@@ -189,38 +282,45 @@ def decodificar_solucion(solucion):
 
 def evaluar_solucion(solucion, verbose=False):
     """
-    Evalúa una solución.
+    Evalúa una solución candidata.
 
-    Retorna:
-        costo_total, detalles
+    La función objetivo combina:
+        - latencia total
+        - desbalance de utilización de enlaces
+        - penalización por exceder capacidad
+        - penalización por superar umbral de congestión
+
+    Menor costo significa mejor solución.
     """
     rutas = decodificar_solucion(solucion)
 
     flujo_por_arista = defaultdict(float)
     latencia_total = 0.0
 
-    # 1) Asignar flujo de cada demanda a la ruta seleccionada
+    # Asignación de tráfico a los enlaces según las rutas elegidas
     for i, ruta in enumerate(rutas):
         origen, destino, trafico = DEMANDAS[i]
-        aristas = ruta_a_aristas(ruta)
 
-        # Latencia multiplicada por tráfico
+        aristas = ruta_a_aristas(ruta)
         latencia_ruta = costo_latencia_ruta(ruta)
+
         latencia_total += latencia_ruta * trafico
 
         for arista in aristas:
             flujo_por_arista[arista] += trafico
 
-    # 2) Calcular utilización de enlaces
     utilizaciones = []
     penalizacion_capacidad = 0.0
     penalizacion_congestion = 0.0
 
+    # Cálculo de utilización y penalizaciones por enlace
     for arista, datos in ENLACES.items():
         capacidad = datos["capacidad"]
         umbral = datos["umbral"]
+
         flujo = flujo_por_arista[arista]
         uso = flujo / capacidad if capacidad > 0 else float("inf")
+
         utilizaciones.append(uso)
 
         exceso_capacidad = max(0.0, flujo - capacidad)
@@ -229,11 +329,10 @@ def evaluar_solucion(solucion, verbose=False):
         exceso_umbral = max(0.0, uso - umbral)
         penalizacion_congestion += exceso_umbral ** 2
 
-    # 3) Desbalance = varianza de utilizaciones
+    # La varianza mide qué tan desbalanceado está el uso de los enlaces
     promedio = sum(utilizaciones) / len(utilizaciones)
     varianza = sum((u - promedio) ** 2 for u in utilizaciones) / len(utilizaciones)
 
-    # 4) Función objetivo
     costo_total = (
         ALPHA * latencia_total
         + BETA * varianza
@@ -256,15 +355,22 @@ def evaluar_solucion(solucion, verbose=False):
 
     return costo_total, detalles
 
+
 def imprimir_detalles(solucion, costo, detalles):
+    """
+    Imprime los detalles de una solución.
+    """
     print("\n====================================================")
-    print("MEJOR SOLUCIÓN ENCONTRADA")
+    print("MEJOR SOLUCIÓN ANALIZADA")
     print("====================================================")
     print("Genotipo:", solucion)
+
     print("\nRutas elegidas por demanda:")
+
     for i, ruta in enumerate(detalles["rutas"]):
         origen, destino, trafico = DEMANDAS[i]
-        print(f"  Demanda {i+1}: {origen} -> {destino}  tráfico={trafico}")
+
+        print(f"  Demanda {i + 1}: {origen} -> {destino}  tráfico={trafico}")
         print(f"    Ruta: {' -> '.join(ruta)}")
         print(f"    Latencia ruta: {costo_latencia_ruta(ruta)}")
 
@@ -276,14 +382,17 @@ def imprimir_detalles(solucion, costo, detalles):
     print(f"  Penalización congestión:   {detalles['penalizacion_congestion']:.4f}")
 
     print("\nFlujo por enlace:")
+
     for arista in sorted(ENLACES.keys()):
         datos = ENLACES[arista]
         flujo = detalles["flujo_por_arista"].get(arista, 0.0)
         uso = flujo / datos["capacidad"]
+
         print(
             f"  {arista}: flujo={flujo:.2f}, capacidad={datos['capacidad']}, "
             f"uso={uso:.3f}, umbral={datos['umbral']}"
         )
+
     print("====================================================\n")
 
 # ============================================================
@@ -292,36 +401,48 @@ def imprimir_detalles(solucion, costo, detalles):
 
 def reparar_solucion(solucion):
     """
-    Garantiza que cada gen esté dentro del rango válido.
+    Ajusta una solución para que cada gen sea un índice válido.
     """
     reparada = []
+
     for i, gen in enumerate(solucion):
         max_idx = len(RUTAS_CANDIDATAS[i]) - 1
+
         gen = int(round(gen))
+
         if gen < 0:
             gen = 0
+
         if gen > max_idx:
             gen = max_idx
+
         reparada.append(gen)
+
     return reparada
+
 
 def mutar_solucion(solucion, prob_mutacion=0.1):
     """
-    Cambia aleatoriamente algunos genes.
+    Modifica aleatoriamente algunos genes de una solución.
     """
     nueva = solucion[:]
+
     for i in range(len(nueva)):
         if random.random() < prob_mutacion:
             nueva[i] = random.randint(0, len(RUTAS_CANDIDATAS[i]) - 1)
+
     return nueva
+
 
 def vecino_aleatorio(solucion):
     """
-    Cambia una sola demanda por otra ruta candidata.
+    Genera una solución vecina cambiando una posición del genotipo.
     """
     nueva = solucion[:]
+
     i = random.randint(0, len(nueva) - 1)
     nueva[i] = random.randint(0, len(RUTAS_CANDIDATAS[i]) - 1)
+
     return nueva
 
 # ============================================================
@@ -329,25 +450,49 @@ def vecino_aleatorio(solucion):
 # ============================================================
 
 def seleccion_torneo(poblacion, fitnesses, tam_torneo=3):
+    """
+    Selecciona un individuo mediante torneo.
+
+    Se eligen varios individuos al azar y se conserva el de menor costo.
+    """
     mejor = None
     mejor_fit = float("inf")
+
     for _ in range(tam_torneo):
         idx = random.randint(0, len(poblacion) - 1)
+
         if fitnesses[idx] < mejor_fit:
             mejor_fit = fitnesses[idx]
             mejor = poblacion[idx][:]
+
     return mejor
 
+
 def cruza_un_punto(p1, p2):
+    """
+    Realiza cruza de un punto entre dos padres.
+    """
     if len(p1) == 1:
         return p1[:], p2[:]
+
     punto = random.randint(1, len(p1) - 1)
+
     h1 = p1[:punto] + p2[punto:]
     h2 = p2[:punto] + p1[punto:]
+
     return h1, h2
 
-def algoritmo_genetico(tam_poblacion=POBLACION, generaciones=ITERACIONES,
-                       prob_cruza=0.9, prob_mutacion=0.12, elitismo=2):
+
+def algoritmo_genetico(
+    tam_poblacion=POBLACION,
+    generaciones=ITERACIONES,
+    prob_cruza=0.9,
+    prob_mutacion=0.12,
+    elitismo=2
+):
+    """
+    Ejecuta el Algoritmo Genético.
+    """
     poblacion = [crear_solucion_aleatoria() for _ in range(tam_poblacion)]
 
     mejor_sol = None
@@ -355,14 +500,15 @@ def algoritmo_genetico(tam_poblacion=POBLACION, generaciones=ITERACIONES,
 
     for gen in range(generaciones):
         fitnesses = []
+
         for ind in poblacion:
             fit, _ = evaluar_solucion(ind)
             fitnesses.append(fit)
+
             if fit < mejor_fit:
                 mejor_fit = fit
                 mejor_sol = ind[:]
 
-        # Elitismo
         pares = sorted(zip(poblacion, fitnesses), key=lambda x: x[1])
         nueva_poblacion = [copy.deepcopy(ind) for ind, _ in pares[:elitismo]]
 
@@ -377,10 +523,12 @@ def algoritmo_genetico(tam_poblacion=POBLACION, generaciones=ITERACIONES,
 
             h1 = mutar_solucion(h1, prob_mutacion)
             h2 = mutar_solucion(h2, prob_mutacion)
+
             h1 = reparar_solucion(h1)
             h2 = reparar_solucion(h2)
 
             nueva_poblacion.append(h1)
+
             if len(nueva_poblacion) < tam_poblacion:
                 nueva_poblacion.append(h2)
 
@@ -392,9 +540,19 @@ def algoritmo_genetico(tam_poblacion=POBLACION, generaciones=ITERACIONES,
 # 2) PSO DISCRETO
 # ============================================================
 
-def pso_discreto(num_particulas=POBLACION, iteraciones=ITERACIONES,
-                 w=0.7, c1=1.6, c2=1.6):
-    # Posiciones reales para permitir movimiento tipo PSO
+def pso_discreto(
+    num_particulas=POBLACION,
+    iteraciones=ITERACIONES,
+    w=0.7,
+    c1=1.6,
+    c2=1.6
+):
+    """
+    Ejecuta PSO adaptado a una representación discreta.
+
+    Las posiciones se manejan como valores continuos y después se
+    convierten a índices enteros válidos mediante reparación.
+    """
     posiciones = []
     velocidades = []
     pbest = []
@@ -403,15 +561,19 @@ def pso_discreto(num_particulas=POBLACION, iteraciones=ITERACIONES,
     for _ in range(num_particulas):
         pos = []
         vel = []
+
         for rutas in RUTAS_CANDIDATAS:
             max_idx = len(rutas) - 1
+
             pos.append(random.uniform(0, max_idx))
             vel.append(random.uniform(-1, 1))
+
         posiciones.append(pos)
         velocidades.append(vel)
 
         sol = reparar_solucion(pos)
         fit, _ = evaluar_solucion(sol)
+
         pbest.append(pos[:])
         pbest_fit.append(fit)
 
@@ -423,11 +585,13 @@ def pso_discreto(num_particulas=POBLACION, iteraciones=ITERACIONES,
             for d in range(len(RUTAS_CANDIDATAS)):
                 r1 = random.random()
                 r2 = random.random()
+
                 velocidades[i][d] = (
                     w * velocidades[i][d]
                     + c1 * r1 * (pbest[i][d] - posiciones[i][d])
                     + c2 * r2 * (gbest[d] - posiciones[i][d])
                 )
+
                 posiciones[i][d] += velocidades[i][d]
 
             sol = reparar_solucion(posiciones[i])
@@ -442,6 +606,7 @@ def pso_discreto(num_particulas=POBLACION, iteraciones=ITERACIONES,
                     gbest_fit = fit
 
     mejor_sol = reparar_solucion(gbest)
+
     return mejor_sol, gbest_fit
 
 # ============================================================
@@ -449,9 +614,12 @@ def pso_discreto(num_particulas=POBLACION, iteraciones=ITERACIONES,
 # ============================================================
 
 def gwo_discreto(num_lobos=POBLACION, iteraciones=ITERACIONES):
+    """
+    Ejecuta Grey Wolf Optimizer adaptado a una representación discreta.
+    """
     lobos = [crear_solucion_aleatoria() for _ in range(num_lobos)]
 
-    for _ in range(iteraciones):
+    for iteracion in range(iteraciones):
         evaluados = sorted(
             [(lobo, evaluar_solucion(lobo)[0]) for lobo in lobos],
             key=lambda x: x[1]
@@ -461,11 +629,13 @@ def gwo_discreto(num_lobos=POBLACION, iteraciones=ITERACIONES):
         beta = evaluados[1][0][:] if len(evaluados) > 1 else alfa[:]
         delta = evaluados[2][0][:] if len(evaluados) > 2 else beta[:]
 
-        a = 2 - 2 * (_ / max(1, iteraciones - 1))
+        a = 2 - 2 * (iteracion / max(1, iteraciones - 1))
 
         nuevos_lobos = []
+
         for lobo in lobos:
             nuevo = []
+
             for d in range(len(lobo)):
                 x = lobo[d]
 
@@ -485,12 +655,13 @@ def gwo_discreto(num_lobos=POBLACION, iteraciones=ITERACIONES):
                 X3 = delta[d] - A3 * D_delta
 
                 valor = (X1 + X2 + X3) / 3
+
                 max_idx = len(RUTAS_CANDIDATAS[d]) - 1
                 valor = int(round(valor))
                 valor = max(0, min(max_idx, valor))
+
                 nuevo.append(valor)
 
-            # Ligera mutación para evitar estancamiento
             if random.random() < 0.15:
                 nuevo = vecino_aleatorio(nuevo)
 
@@ -500,19 +671,23 @@ def gwo_discreto(num_lobos=POBLACION, iteraciones=ITERACIONES):
 
     mejor = min(lobos, key=lambda s: evaluar_solucion(s)[0])
     mejor_fit, _ = evaluar_solucion(mejor)
+
     return mejor, mejor_fit
 
 # ============================================================
-# 4) ABC (ARTIFICIAL BEE COLONY)
+# 4) ABC - ARTIFICIAL BEE COLONY
 # ============================================================
 
 def abc(num_fuentes=POBLACION, iteraciones=ITERACIONES, limite=15):
+    """
+    Ejecuta Artificial Bee Colony.
+    """
     fuentes = [crear_solucion_aleatoria() for _ in range(num_fuentes)]
     fitness = [evaluar_solucion(f)[0] for f in fuentes]
     intentos = [0] * num_fuentes
 
     for _ in range(iteraciones):
-        # Abejas empleadas
+
         for i in range(num_fuentes):
             candidata = vecino_aleatorio(fuentes[i])
             fit_cand, _ = evaluar_solucion(candidata)
@@ -524,19 +699,18 @@ def abc(num_fuentes=POBLACION, iteraciones=ITERACIONES, limite=15):
             else:
                 intentos[i] += 1
 
-        # Probabilidades para abejas observadoras
-        # Mejor costo => mayor probabilidad
         aptitudes = [1 / (1 + f) for f in fitness]
         suma_apt = sum(aptitudes)
         probabilidades = [a / suma_apt for a in aptitudes]
 
-        # Abejas observadoras
         for _ in range(num_fuentes):
             r = random.random()
             acumulado = 0.0
             idx = 0
+
             for i, p in enumerate(probabilidades):
                 acumulado += p
+
                 if r <= acumulado:
                     idx = i
                     break
@@ -551,7 +725,6 @@ def abc(num_fuentes=POBLACION, iteraciones=ITERACIONES, limite=15):
             else:
                 intentos[idx] += 1
 
-        # Abejas exploradoras
         for i in range(num_fuentes):
             if intentos[i] >= limite:
                 fuentes[i] = crear_solucion_aleatoria()
@@ -559,14 +732,23 @@ def abc(num_fuentes=POBLACION, iteraciones=ITERACIONES, limite=15):
                 intentos[i] = 0
 
     mejor_idx = fitness.index(min(fitness))
+
     return fuentes[mejor_idx], fitness[mejor_idx]
 
 # ============================================================
-# 5) AIS (ARTIFICIAL IMMUNE SYSTEM)
+# 5) AIS - ARTIFICIAL IMMUNE SYSTEM
 # ============================================================
 
-def ais(tam_poblacion=POBLACION, iteraciones=ITERACIONES,
-        num_seleccionados=10, factor_clon=4, tasa_mutacion_base=0.3):
+def ais(
+    tam_poblacion=POBLACION,
+    iteraciones=ITERACIONES,
+    num_seleccionados=10,
+    factor_clon=4,
+    tasa_mutacion_base=0.3
+):
+    """
+    Ejecuta Artificial Immune System.
+    """
     poblacion = [crear_solucion_aleatoria() for _ in range(tam_poblacion)]
 
     mejor_sol = None
@@ -585,9 +767,7 @@ def ais(tam_poblacion=POBLACION, iteraciones=ITERACIONES,
         seleccionados = [ind for ind, _ in evaluados[:num_seleccionados]]
         clones = []
 
-        # Clonación + hipermutación
         for rank, ind in enumerate(seleccionados):
-            # Mejor rank => menos mutación
             for _ in range(factor_clon):
                 clon = ind[:]
                 tasa_mutacion = tasa_mutacion_base * ((rank + 1) / num_seleccionados)
@@ -595,10 +775,8 @@ def ais(tam_poblacion=POBLACION, iteraciones=ITERACIONES,
                 clon = reparar_solucion(clon)
                 clones.append(clon)
 
-        # Mezclar población actual y clones
         candidatos = poblacion + clones
 
-        # Selección de los mejores
         candidatos = sorted(
             candidatos,
             key=lambda s: evaluar_solucion(s)[0]
@@ -606,7 +784,6 @@ def ais(tam_poblacion=POBLACION, iteraciones=ITERACIONES,
 
         nueva_poblacion = candidatos[:tam_poblacion // 2]
 
-        # Introducir diversidad
         while len(nueva_poblacion) < tam_poblacion:
             nueva_poblacion.append(crear_solucion_aleatoria())
 
@@ -619,21 +796,67 @@ def ais(tam_poblacion=POBLACION, iteraciones=ITERACIONES,
 # ============================================================
 
 def mostrar_rutas_candidatas():
+    """
+    Muestra las rutas candidatas generadas para cada demanda.
+    """
     print("\n====================================================")
     print("RUTAS CANDIDATAS POR DEMANDA")
     print("====================================================")
+
     for i, demanda in enumerate(DEMANDAS):
         origen, destino, trafico = demanda
-        print(f"\nDemanda {i+1}: {origen} -> {destino}  tráfico={trafico}")
+
+        print(f"\nDemanda {i + 1}: {origen} -> {destino}  tráfico={trafico}")
+
         for j, ruta in enumerate(RUTAS_CANDIDATAS[i]):
-            print(f"  Ruta {j}: {' -> '.join(ruta)} | Latencia={costo_latencia_ruta(ruta)}")
+            print(
+                f"  Ruta {j}: {' -> '.join(ruta)} "
+                f"| Latencia={costo_latencia_ruta(ruta)}"
+            )
+
     print("====================================================\n")
+
+# ============================================================
+# ANÁLISIS DE EMPATES
+# ============================================================
+
+def obtener_algoritmos_empatados(resultados, mejor_costo):
+    """
+    Obtiene todos los algoritmos cuyo costo sea igual al menor costo encontrado,
+    usando una tolerancia para evitar errores por decimales.
+    """
+    empatados = []
+
+    for nombre, sol, fit in resultados:
+        if abs(fit - mejor_costo) <= TOLERANCIA:
+            empatados.append((nombre, sol, fit))
+
+    return empatados
+
+
+def soluciones_iguales(empatados):
+    """
+    Verifica si todos los algoritmos empatados llegaron al mismo genotipo.
+    """
+    if not empatados:
+        return False
+
+    primera_solucion = empatados[0][1]
+
+    for nombre, sol, fit in empatados:
+        if sol != primera_solucion:
+            return False
+
+    return True
 
 # ============================================================
 # EJECUCIÓN Y COMPARACIÓN
 # ============================================================
 
 def ejecutar_todos():
+    """
+    Ejecuta todos los algoritmos y compara sus resultados.
+    """
     mostrar_rutas_candidatas()
 
     resultados = []
@@ -663,12 +886,37 @@ def ejecutar_todos():
     print("\n====================================================")
     print("RESUMEN FINAL")
     print("====================================================")
+
     for nombre, sol, fit in resultados:
         print(f"{nombre:20s} -> costo = {fit:.4f}, solución = {sol}")
+
     print("====================================================")
 
-    mejor_nombre, mejor_sol, mejor_fit = resultados[0]
-    print(f"\nMejor algoritmo en esta ejecución: {mejor_nombre}")
+    mejor_costo = resultados[0][2]
+    empatados = obtener_algoritmos_empatados(resultados, mejor_costo)
+
+    print(f"\nMejor costo encontrado: {mejor_costo:.4f}")
+
+    if len(empatados) == 1:
+        mejor_nombre, mejor_sol, mejor_fit = empatados[0]
+        print(f"Mejor algoritmo en esta ejecución: {mejor_nombre}")
+
+    else:
+        print("Resultado: existe empate en el menor costo encontrado.")
+        print("Algoritmos empatados:")
+
+        for nombre, sol, fit in empatados:
+            print(f"  - {nombre}: costo = {fit:.4f}, solución = {sol}")
+
+        if soluciones_iguales(empatados):
+            print("Los algoritmos empatados llegaron a la misma solución.")
+        else:
+            print("Los algoritmos empatados llegaron al mismo costo con soluciones distintas.")
+
+        mejor_nombre, mejor_sol, mejor_fit = empatados[0]
+
+    print("\nSe muestra el detalle de una solución con el mejor costo encontrado.")
+
     _, detalles = evaluar_solucion(mejor_sol)
     imprimir_detalles(mejor_sol, mejor_fit, detalles)
 
