@@ -23,12 +23,13 @@
 #
 # Requisitos:
 #   - Python 3.x
-#   - No usa librerías externas
+#   - matplotlib para generar gráficas
 # ============================================================
 
 import random
 import copy
 from collections import defaultdict
+import matplotlib.pyplot as plt
 
 # ============================================================
 # CONFIGURACIÓN GENERAL
@@ -56,16 +57,6 @@ TOLERANCIA = 1e-6
 # ============================================================
 # DATOS DEL PROBLEMA
 # ============================================================
-# Red no dirigida.
-#
-# Formato:
-#   ("N1", "N2"): {"capacidad": 100, "latencia": 10, "umbral": 0.75}
-#
-# Cada enlace tiene:
-#   - capacidad: tráfico máximo que soporta el enlace
-#   - latencia: costo de tiempo asociado al enlace
-#   - umbral: porcentaje máximo recomendado de uso antes de considerarlo congestionado
-# ============================================================
 
 ENLACES = {
     ("N1", "N2"): {"capacidad": 100, "latencia": 4, "umbral": 0.75},
@@ -79,13 +70,6 @@ ENLACES = {
     ("N5", "N6"): {"capacidad": 100, "latencia": 2, "umbral": 0.80},
 }
 
-# Demandas de tráfico.
-#
-# Formato:
-#   (origen, destino, tráfico)
-#
-# Cada demanda representa una cantidad de tráfico que debe enviarse
-# desde un nodo origen hasta un nodo destino.
 DEMANDAS = [
     ("N1", "N6", 30),
     ("N1", "N5", 25),
@@ -138,10 +122,6 @@ def obtener_datos_arista(u, v):
 def costo_latencia_ruta(ruta):
     """
     Calcula la latencia total de una ruta.
-
-    Ejemplo:
-        Ruta: N1 -> N3 -> N5
-        Latencia total = latencia(N1,N3) + latencia(N3,N5)
     """
     total = 0
 
@@ -156,12 +136,6 @@ def costo_latencia_ruta(ruta):
 def ruta_a_aristas(ruta):
     """
     Convierte una ruta de nodos en una lista de aristas.
-
-    Ejemplo:
-        ["N1", "N3", "N5"]
-
-    Se convierte en:
-        [("N1", "N3"), ("N3", "N5")]
     """
     aristas = []
 
@@ -297,7 +271,6 @@ def evaluar_solucion(solucion, verbose=False):
     flujo_por_arista = defaultdict(float)
     latencia_total = 0.0
 
-    # Asignación de tráfico a los enlaces según las rutas elegidas
     for i, ruta in enumerate(rutas):
         origen, destino, trafico = DEMANDAS[i]
 
@@ -313,7 +286,6 @@ def evaluar_solucion(solucion, verbose=False):
     penalizacion_capacidad = 0.0
     penalizacion_congestion = 0.0
 
-    # Cálculo de utilización y penalizaciones por enlace
     for arista, datos in ENLACES.items():
         capacidad = datos["capacidad"]
         umbral = datos["umbral"]
@@ -329,7 +301,6 @@ def evaluar_solucion(solucion, verbose=False):
         exceso_umbral = max(0.0, uso - umbral)
         penalizacion_congestion += exceso_umbral ** 2
 
-    # La varianza mide qué tan desbalanceado está el uso de los enlaces
     promedio = sum(utilizaciones) / len(utilizaciones)
     varianza = sum((u - promedio) ** 2 for u in utilizaciones) / len(utilizaciones)
 
@@ -492,11 +463,15 @@ def algoritmo_genetico(
 ):
     """
     Ejecuta el Algoritmo Genético.
+
+    Devuelve:
+        mejor solución, mejor costo e historial de convergencia.
     """
     poblacion = [crear_solucion_aleatoria() for _ in range(tam_poblacion)]
 
     mejor_sol = None
     mejor_fit = float("inf")
+    historial = []
 
     for gen in range(generaciones):
         fitnesses = []
@@ -508,6 +483,8 @@ def algoritmo_genetico(
             if fit < mejor_fit:
                 mejor_fit = fit
                 mejor_sol = ind[:]
+
+        historial.append(mejor_fit)
 
         pares = sorted(zip(poblacion, fitnesses), key=lambda x: x[1])
         nueva_poblacion = [copy.deepcopy(ind) for ind, _ in pares[:elitismo]]
@@ -534,7 +511,7 @@ def algoritmo_genetico(
 
         poblacion = nueva_poblacion
 
-    return mejor_sol, mejor_fit
+    return mejor_sol, mejor_fit, historial
 
 # ============================================================
 # 2) PSO DISCRETO
@@ -550,8 +527,8 @@ def pso_discreto(
     """
     Ejecuta PSO adaptado a una representación discreta.
 
-    Las posiciones se manejan como valores continuos y después se
-    convierten a índices enteros válidos mediante reparación.
+    Devuelve:
+        mejor solución, mejor costo e historial de convergencia.
     """
     posiciones = []
     velocidades = []
@@ -579,6 +556,7 @@ def pso_discreto(
 
     gbest = pbest[pbest_fit.index(min(pbest_fit))][:]
     gbest_fit = min(pbest_fit)
+    historial = [gbest_fit]
 
     for _ in range(iteraciones):
         for i in range(num_particulas):
@@ -605,9 +583,11 @@ def pso_discreto(
                     gbest = posiciones[i][:]
                     gbest_fit = fit
 
+        historial.append(gbest_fit)
+
     mejor_sol = reparar_solucion(gbest)
 
-    return mejor_sol, gbest_fit
+    return mejor_sol, gbest_fit, historial
 
 # ============================================================
 # 3) GWO DISCRETO
@@ -616,14 +596,27 @@ def pso_discreto(
 def gwo_discreto(num_lobos=POBLACION, iteraciones=ITERACIONES):
     """
     Ejecuta Grey Wolf Optimizer adaptado a una representación discreta.
+
+    Devuelve:
+        mejor solución, mejor costo e historial de convergencia.
     """
     lobos = [crear_solucion_aleatoria() for _ in range(num_lobos)]
+
+    mejor_global = None
+    mejor_global_fit = float("inf")
+    historial = []
 
     for iteracion in range(iteraciones):
         evaluados = sorted(
             [(lobo, evaluar_solucion(lobo)[0]) for lobo in lobos],
             key=lambda x: x[1]
         )
+
+        if evaluados[0][1] < mejor_global_fit:
+            mejor_global = evaluados[0][0][:]
+            mejor_global_fit = evaluados[0][1]
+
+        historial.append(mejor_global_fit)
 
         alfa = evaluados[0][0][:]
         beta = evaluados[1][0][:] if len(evaluados) > 1 else alfa[:]
@@ -669,10 +662,7 @@ def gwo_discreto(num_lobos=POBLACION, iteraciones=ITERACIONES):
 
         lobos = nuevos_lobos
 
-    mejor = min(lobos, key=lambda s: evaluar_solucion(s)[0])
-    mejor_fit, _ = evaluar_solucion(mejor)
-
-    return mejor, mejor_fit
+    return mejor_global, mejor_global_fit, historial
 
 # ============================================================
 # 4) ABC - ARTIFICIAL BEE COLONY
@@ -681,13 +671,20 @@ def gwo_discreto(num_lobos=POBLACION, iteraciones=ITERACIONES):
 def abc(num_fuentes=POBLACION, iteraciones=ITERACIONES, limite=15):
     """
     Ejecuta Artificial Bee Colony.
+
+    Devuelve:
+        mejor solución, mejor costo e historial de convergencia.
     """
     fuentes = [crear_solucion_aleatoria() for _ in range(num_fuentes)]
     fitness = [evaluar_solucion(f)[0] for f in fuentes]
     intentos = [0] * num_fuentes
 
-    for _ in range(iteraciones):
+    mejor_idx = fitness.index(min(fitness))
+    mejor_sol = fuentes[mejor_idx][:]
+    mejor_fit = fitness[mejor_idx]
+    historial = [mejor_fit]
 
+    for _ in range(iteraciones):
         for i in range(num_fuentes):
             candidata = vecino_aleatorio(fuentes[i])
             fit_cand, _ = evaluar_solucion(candidata)
@@ -731,9 +728,15 @@ def abc(num_fuentes=POBLACION, iteraciones=ITERACIONES, limite=15):
                 fitness[i] = evaluar_solucion(fuentes[i])[0]
                 intentos[i] = 0
 
-    mejor_idx = fitness.index(min(fitness))
+        mejor_idx_actual = fitness.index(min(fitness))
 
-    return fuentes[mejor_idx], fitness[mejor_idx]
+        if fitness[mejor_idx_actual] < mejor_fit:
+            mejor_sol = fuentes[mejor_idx_actual][:]
+            mejor_fit = fitness[mejor_idx_actual]
+
+        historial.append(mejor_fit)
+
+    return mejor_sol, mejor_fit, historial
 
 # ============================================================
 # 5) AIS - ARTIFICIAL IMMUNE SYSTEM
@@ -748,11 +751,15 @@ def ais(
 ):
     """
     Ejecuta Artificial Immune System.
+
+    Devuelve:
+        mejor solución, mejor costo e historial de convergencia.
     """
     poblacion = [crear_solucion_aleatoria() for _ in range(tam_poblacion)]
 
     mejor_sol = None
     mejor_fit = float("inf")
+    historial = []
 
     for _ in range(iteraciones):
         evaluados = sorted(
@@ -763,6 +770,8 @@ def ais(
         if evaluados[0][1] < mejor_fit:
             mejor_sol = evaluados[0][0][:]
             mejor_fit = evaluados[0][1]
+
+        historial.append(mejor_fit)
 
         seleccionados = [ind for ind, _ in evaluados[:num_seleccionados]]
         clones = []
@@ -789,7 +798,7 @@ def ais(
 
         poblacion = nueva_poblacion
 
-    return mejor_sol, mejor_fit
+    return mejor_sol, mejor_fit, historial
 
 # ============================================================
 # IMPRESIÓN DE RUTAS CANDIDATAS
@@ -850,6 +859,46 @@ def soluciones_iguales(empatados):
     return True
 
 # ============================================================
+# GRÁFICAS DE CONVERGENCIA
+# ============================================================
+
+def graficar_convergencia(historiales):
+    """
+    Genera dos gráficas de convergencia:
+        - Escala lineal
+        - Escala logarítmica
+    """
+    plt.figure(figsize=(14, 5))
+
+    plt.subplot(1, 2, 1)
+
+    for nombre, historial in historiales.items():
+        plt.plot(historial, label=nombre)
+
+    plt.title("Convergencia - Escala lineal")
+    plt.xlabel("Iteración")
+    plt.ylabel("Función objetivo")
+    plt.grid(True)
+    plt.legend()
+
+    plt.subplot(1, 2, 2)
+
+    for nombre, historial in historiales.items():
+        plt.plot(historial, label=nombre)
+
+    plt.yscale("log")
+    plt.title("Convergencia - Escala logarítmica")
+    plt.xlabel("Iteración")
+    plt.ylabel("Función objetivo")
+    plt.grid(True)
+    plt.legend()
+
+    plt.suptitle("Optimización de red de datos — PSO | GWO | GA | ABC | AIS")
+    plt.tight_layout()
+    plt.savefig("convergencia_algoritmos.png", dpi=300)
+    plt.show()
+
+# ============================================================
 # EJECUCIÓN Y COMPARACIÓN
 # ============================================================
 
@@ -860,26 +909,32 @@ def ejecutar_todos():
     mostrar_rutas_candidatas()
 
     resultados = []
+    historiales = {}
 
     print("Ejecutando Algoritmo Genético...")
-    sol_ga, fit_ga = algoritmo_genetico()
+    sol_ga, fit_ga, hist_ga = algoritmo_genetico()
     resultados.append(("Algoritmo Genético", sol_ga, fit_ga))
+    historiales["GA"] = hist_ga
 
     print("Ejecutando PSO...")
-    sol_pso, fit_pso = pso_discreto()
+    sol_pso, fit_pso, hist_pso = pso_discreto()
     resultados.append(("PSO", sol_pso, fit_pso))
+    historiales["PSO"] = hist_pso
 
     print("Ejecutando GWO...")
-    sol_gwo, fit_gwo = gwo_discreto()
+    sol_gwo, fit_gwo, hist_gwo = gwo_discreto()
     resultados.append(("GWO", sol_gwo, fit_gwo))
+    historiales["GWO"] = hist_gwo
 
     print("Ejecutando ABC...")
-    sol_abc, fit_abc = abc()
+    sol_abc, fit_abc, hist_abc = abc()
     resultados.append(("ABC", sol_abc, fit_abc))
+    historiales["ABC"] = hist_abc
 
     print("Ejecutando AIS...")
-    sol_ais, fit_ais = ais()
+    sol_ais, fit_ais, hist_ais = ais()
     resultados.append(("AIS", sol_ais, fit_ais))
+    historiales["AIS"] = hist_ais
 
     resultados.sort(key=lambda x: x[2])
 
@@ -919,6 +974,8 @@ def ejecutar_todos():
 
     _, detalles = evaluar_solucion(mejor_sol)
     imprimir_detalles(mejor_sol, mejor_fit, detalles)
+
+    graficar_convergencia(historiales)
 
 # ============================================================
 # MAIN
