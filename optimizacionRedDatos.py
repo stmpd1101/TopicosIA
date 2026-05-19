@@ -16,14 +16,9 @@
 #       * exceso de capacidad
 #       * congestión respecto al umbral
 #
-# Representación:
 #   - Fenotipo: rutas reales usadas por las demandas en la red
-#   - Genotipo: vector discreto, donde cada gen indica cuál
+#   - Genotipo: vector [0,1], donde cada gen indica cuál
 #               ruta candidata usa cada demanda
-#
-# Requisitos:
-#   - Python 3.x
-#   - matplotlib para generar gráficas
 # ============================================================
 
 import random
@@ -35,7 +30,7 @@ import matplotlib.pyplot as plt
 # CONFIGURACIÓN GENERAL
 # ============================================================
 
-SEED = 42
+SEED = 7
 random.seed(SEED)
 
 # Pesos de la función objetivo
