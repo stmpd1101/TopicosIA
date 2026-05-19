@@ -13,4 +13,5 @@
 
 Tarea 1. [Problema del laberinto](./problemalaberinto.py)  
 Tarea 2. [Problema de las reinas](./Reinas_DFS.py)
-
+Tarea 4. [Optimizacion Red Datos](./optimizacionRedDatos.py)
+Tarea 4. [Optimizacion Red Datos](./optimizacionRedDatos.ipynb)
