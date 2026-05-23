@@ -17,7 +17,7 @@
 #       * congestión respecto al umbral
 #
 #   - Fenotipo: rutas reales usadas por las demandas en la red
-#   - Genotipo: vector [0,1], donde cada gen indica cuál
+#   - Genotipo: vector de enteros, donde cada gen indica cuál
 #               ruta candidata usa cada demanda
 # ============================================================
 
@@ -30,7 +30,7 @@ import matplotlib.pyplot as plt
 # CONFIGURACIÓN GENERAL
 # ============================================================
 
-SEED = 7
+SEED = 42
 random.seed(SEED)
 
 # Pesos de la función objetivo
@@ -856,39 +856,17 @@ def soluciones_iguales(empatados):
 # ============================================================
 # GRÁFICAS DE CONVERGENCIA
 # ============================================================
-
 def graficar_convergencia(historiales):
-    """
-    Genera dos gráficas de convergencia:
-        - Escala lineal
-        - Escala logarítmica
-    """
-    plt.figure(figsize=(14, 5))
-
-    plt.subplot(1, 2, 1)
+    plt.figure(figsize=(12, 6))
 
     for nombre, historial in historiales.items():
         plt.plot(historial, label=nombre)
 
-    plt.title("Convergencia - Escala lineal")
+    plt.title("Convergencia de algoritmos bioinspirados")
     plt.xlabel("Iteración")
     plt.ylabel("Función objetivo")
     plt.grid(True)
     plt.legend()
-
-    plt.subplot(1, 2, 2)
-
-    for nombre, historial in historiales.items():
-        plt.plot(historial, label=nombre)
-
-    plt.yscale("log")
-    plt.title("Convergencia - Escala logarítmica")
-    plt.xlabel("Iteración")
-    plt.ylabel("Función objetivo")
-    plt.grid(True)
-    plt.legend()
-
-    plt.suptitle("Optimización de red de datos — PSO | GWO | GA | ABC | AIS")
     plt.tight_layout()
     plt.savefig("convergencia_algoritmos.png", dpi=300)
     plt.show()
